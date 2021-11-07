@@ -1,0 +1,22 @@
+[package]
+name = "racer"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+iced = { version = "0.3.0", git = "https://github.com/iced-rs/iced.git", features = ["canvas", "tokio", "debug"] }
+iced_futures = { git = "https://github.com/iced-rs/iced.git" }
+iced_native = { git = "https://github.com/iced-rs/iced.git" }
+tokio = { version = "1.0", features = ["sync", "net"] }
+tokio-util = { version = "0.6.9", features = ["io"] }
+itertools = "0.9"
+rustc-hash = "1.1"
+rand = "0.8.4"
+bio = "0.39.0"
+rtic-scope-api = { git = "https://github.com/rtic-scope/api" }
+anyhow = "1"
+tempfile = "3"
+serde_json = "1"
