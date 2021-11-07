@@ -108,6 +108,9 @@ mod grid {
         started_bars: Vec<Bar>,
         channel_map: Vec<String>,
         status: String,
+        min: usize,
+        max: usize,
+        width: usize,
     }
 
     #[derive(Debug, Clone)]
@@ -135,6 +138,9 @@ mod grid {
                 started_bars: vec![],
                 channel_map: vec![],
                 status: String::new(),
+                min: 0,
+                max: 0,
+                width: 0,
             };
             s.set_zoom(1280.0 / 100.0);
             s.set_bars();
@@ -171,41 +177,62 @@ mod grid {
 
         pub fn add_event(&mut self, timestamp: usize, event: EventType) {
             let timestamp = timestamp - 1635868484415470248;
+            self.max = self.max.max(timestamp);
+            self.min = self.min.min(timestamp);
             match event {
                 EventType::Overflow => (),
-                EventType::Task { name, action } => match action {
-                    rtic_scope_api::TaskAction::Entered => {
-                        let channel = if let Some((index, _name)) =
-                            self.channel_map.iter().find_position(|c| *c == &name)
-                        {
-                            index
-                        } else {
-                            self.channel_map.push(name.clone());
-                            self.channel_map.len() - 1
-                        };
-                        self.started_bars.push(Bar {
-                            start_ns: timestamp,
-                            end_ns: None,
-                            isr: name,
-                            channel,
-                        });
-                    }
-                    rtic_scope_api::TaskAction::Exited => {
-                        let mut found = None;
-                        for (i, bar) in self.started_bars.iter().enumerate() {
-                            if bar.start_ns < timestamp && bar.isr == name {
-                                found = Some(i);
-                                break;
+                EventType::Task { name, action } => {
+                    match action {
+                        rtic_scope_api::TaskAction::Entered => {
+                            let channel = if let Some((index, _name)) =
+                                self.channel_map.iter().find_position(|c| *c == &name)
+                            {
+                                index
+                            } else {
+                                self.channel_map.push(name.clone());
+                                self.channel_map.len() - 1
+                            };
+                            self.started_bars.push(Bar {
+                                start_ns: timestamp,
+                                end_ns: None,
+                                isr: name,
+                                channel,
+                            });
+                        }
+                        rtic_scope_api::TaskAction::Exited => {
+                            let mut found = None;
+                            for (i, bar) in self.started_bars.iter().enumerate() {
+                                if bar.start_ns < timestamp && bar.isr == name {
+                                    found = Some(i);
+                                    break;
+                                }
+                            }
+                            if let Some(found) = found {
+                                let mut bar = self.started_bars.remove(found);
+                                bar.end_ns = Some(timestamp);
+                                self.bars.insert(bar.start_ns..timestamp, bar);
                             }
                         }
-                        if let Some(found) = found {
-                            let mut bar = self.started_bars.remove(found);
-                            bar.end_ns = Some(timestamp);
-                            self.bars.insert(bar.start_ns..timestamp, bar);
-                        }
-                    }
-                    rtic_scope_api::TaskAction::Returned => (),
-                },
+                        rtic_scope_api::TaskAction::Returned => (),
+                    };
+
+                    let screen_start = 0f32;
+                    let screen_end = self.width as f32;
+                    let start = self.min as f32;
+                    let end = self.max as f32;
+
+                    // start = screen_start / zoom - pan
+                    // end = screen_end / zoom - pan
+                    // start - end = screen_start / zoom - screen_end / zoom
+
+                    let zoom = (screen_start - screen_end) / (start - end);
+                    let pan = screen_start / zoom - start;
+
+                    self.set_zoom(zoom);
+                    self.set_pan(pan);
+                    self.bar_cache.clear();
+                    self.grid_cache.clear();
+                }
                 EventType::Unknown(_) => (),
                 EventType::Unmappable(_, _) => (),
                 EventType::Invalid(_) => (),
@@ -225,6 +252,11 @@ mod grid {
 
         fn update_pan(&mut self, delta: f32) {
             self.pan += delta / self.zoom; // px / (px / ns) = ns
+            self.pan = self.pan.min(0.5);
+        }
+
+        fn set_pan(&mut self, pan: f32) {
+            self.pan = pan;
             self.pan = self.pan.min(0.5);
         }
 
@@ -257,9 +289,11 @@ mod grid {
         fn update(
             &mut self,
             event: Event,
-            _bounds: Rectangle,
+            bounds: Rectangle,
             cursor: Cursor,
         ) -> (event::Status, Option<Message>) {
+            self.width = bounds.size().width as usize;
+
             if let Event::Mouse(mouse::Event::ButtonReleased(_)) = event {
                 self.interaction = Interaction::None;
             }
