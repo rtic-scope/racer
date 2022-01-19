@@ -49,7 +49,7 @@ impl Application for Timeline {
                 Progress::Event(events) => {
                     for event in events.events {
                         self.grid
-                            .add_event(events.timestamp.ts.timestamp_nanos() as usize, event);
+                            .add_event(events.timestamp.offset.as_nanos() as usize, event);
                     }
                 }
                 Progress::Error(error) => self.grid.set_status(format!("Error {:?}", error)),
@@ -176,7 +176,7 @@ mod grid {
         }
 
         pub fn add_event(&mut self, timestamp: usize, event: EventType) {
-            let timestamp = timestamp - 1635868484415470248;
+            let timestamp = timestamp - 0;
             self.max = self.max.max(timestamp);
             self.min = self.min.min(timestamp);
             match event {
